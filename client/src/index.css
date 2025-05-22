@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222 84% 4.9%;
+  --muted: 210 40% 98%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 84% 4.9%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --primary: 5 85% 69%; /* Coral #FF6B6B */
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 98%;
+  --secondary-foreground: 222.2 84% 4.9%;
+  --accent: 210 40% 98%;
+  --accent-foreground: 222.2 84% 4.9%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --ring: 222.2 84% 4.9%;
+  --radius: 0.5rem;
+  
+  /* Custom colors */
+  --coral: 5 85% 69%; /* #FF6B6B */
+  --teal: 174 71% 56%; /* #4ECDC4 */
+  --sky: 200 71% 60%; /* #45B7D1 */
+  --slate: 210 29% 24%; /* #2C3E50 */
+  --available: 134 61% 41%; /* #27AE60 */
+  --unavailable: 6 78% 57%; /* #E74C3C */
+  --limited: 35 81% 50%; /* #F39C12 */
+}
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --primary: 5 85% 69%;
+  --primary-foreground: 222.2 84% 4.9%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --ring: 212.7 26.8% 83.9%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  }
+}
+
+@layer components {
+  .glass-effect {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .gradient-overlay {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.9) 0%, rgba(69, 183, 209, 0.9) 100%);
+  }
+
+  .coral {
+    color: hsl(var(--coral));
+  }
+
+  .bg-coral {
+    background-color: hsl(var(--coral));
+  }
+
+  .teal {
+    color: hsl(var(--teal));
+  }
+
+  .bg-teal {
+    background-color: hsl(var(--teal));
+  }
+
+  .sky {
+    color: hsl(var(--sky));
+  }
+
+  .bg-sky {
+    background-color: hsl(var(--sky));
+  }
+
+  .slate {
+    color: hsl(var(--slate));
+  }
+
+  .bg-slate {
+    background-color: hsl(var(--slate));
+  }
+
+  .text-available {
+    color: hsl(var(--available));
+  }
+
+  .bg-available {
+    background-color: hsl(var(--available));
+  }
+
+  .text-unavailable {
+    color: hsl(var(--unavailable));
+  }
+
+  .bg-unavailable {
+    background-color: hsl(var(--unavailable));
+  }
+
+  .text-limited {
+    color: hsl(var(--limited));
+  }
+
+  .bg-limited {
+    background-color: hsl(var(--limited));
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+}
