@@ -65,6 +65,9 @@ export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
             </Link>
           ))}
         </div>
+        <div className="text-center mt-2 text-xs text-gray-500">
+          Made with ❤️ by <a href="https://jason-clark.org" target="_blank" rel="noopener noreferrer" className="text-coral hover:underline">Jason Clark</a> © 2025
+        </div>
       </div>
     </nav>
   );

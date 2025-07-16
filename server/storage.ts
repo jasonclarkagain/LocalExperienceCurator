@@ -11,6 +11,9 @@ import {
   type InsertUserPreferences,
   type SocialTrend
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, sql } from "drizzle-orm";
+import { GoogleMapsService } from "./google-maps";
 
 export interface IStorage {
   // User operations
@@ -34,275 +37,292 @@ export interface IStorage {
   // Social trends
   getAllTrends(): Promise<SocialTrend[]>;
   getTrendingExperiences(): Promise<Experience[]>;
+  
+  // Google Maps integration
+  refreshExperiencesFromGoogleMaps?(location: { lat: number; lng: number }, radius?: number): Promise<Experience[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private experiences: Map<number, Experience>;
-  private userPreferencesMap: Map<number, UserPreferences>;
-  private socialTrendsMap: Map<number, SocialTrend>;
-  private currentUserId: number;
-  private currentExperienceId: number;
-  private currentPreferencesId: number;
-  private currentTrendId: number;
+export class DatabaseStorage implements IStorage {
+  private googleMapsService: GoogleMapsService | null = null;
 
   constructor() {
-    this.users = new Map();
-    this.experiences = new Map();
-    this.userPreferencesMap = new Map();
-    this.socialTrendsMap = new Map();
-    this.currentUserId = 1;
-    this.currentExperienceId = 1;
-    this.currentPreferencesId = 1;
-    this.currentTrendId = 1;
-    
-    this.seedData();
+    // Initialize Google Maps service if API key is available
+    if (process.env.GOOGLE_MAPS_API_KEY) {
+      this.googleMapsService = new GoogleMapsService(process.env.GOOGLE_MAPS_API_KEY);
+    }
+    this.initializeData();
   }
 
-  private seedData() {
-    // Seed users
-    const defaultUser: User = {
-      id: this.currentUserId++,
-      username: "demo_user",
-      email: "demo@localcurate.com",
-      location: "Downtown Seattle",
-      preferences: ["cafe", "art"],
-      savedExperiences: []
-    };
-    this.users.set(defaultUser.id, defaultUser);
+  private async initializeData() {
+    // Check if we have any data, if not, seed it
+    const existingUsers = await db.select().from(users).limit(1);
+    if (existingUsers.length === 0) {
+      await this.seedData();
+    }
+  }
 
-    // Seed experiences
-    const sampleExperiences: Omit<Experience, 'id'>[] = [
-      {
-        name: "The Secret Garden Café",
-        description: "Hidden rooftop garden café with locally-sourced pastries and artisan coffee",
-        category: "cafe",
-        latitude: 47.6089,
-        longitude: -122.3355,
-        address: "1234 Hidden Garden Way, Seattle, WA",
-        imageUrl: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        rating: 4.9,
-        priceLevel: 2,
-        isOpen: true,
-        availabilityStatus: "available",
-        currentVisitors: 23,
-        tags: ["rooftop", "garden", "artisan", "coffee"],
-        trendingScore: 8.5,
-        aiScore: 9.2
-      },
-      {
-        name: "Underground Art Walk",
-        description: "Self-guided tour through hidden murals and installations",
-        category: "art",
-        latitude: 47.6050,
-        longitude: -122.3344,
-        address: "Pioneer Square Underground, Seattle, WA",
-        imageUrl: "https://images.unsplash.com/photo-1549490349-8643362247b5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        rating: 4.7,
-        priceLevel: 1,
-        isOpen: true,
-        availabilityStatus: "limited",
-        currentVisitors: 12,
-        tags: ["underground", "murals", "street art", "self-guided"],
-        trendingScore: 7.8,
-        aiScore: 8.1
-      },
-      {
-        name: "Pike Place Underground",
-        description: "Secret vendors and hidden food stalls locals love",
-        category: "food",
-        latitude: 47.6101,
-        longitude: -122.3421,
-        address: "Pike Place Market Lower Level, Seattle, WA",
-        imageUrl: "https://images.unsplash.com/photo-1488459716781-31db52582fe9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        rating: 4.8,
-        priceLevel: 2,
-        isOpen: true,
-        availabilityStatus: "available",
-        currentVisitors: 8,
-        tags: ["market", "vendors", "local", "hidden"],
-        trendingScore: 9.1,
-        aiScore: 8.7
-      },
-      {
-        name: "Midnight Jazz Sessions",
-        description: "Intimate performances in a hidden speakeasy",
-        category: "events",
-        latitude: 47.6205,
-        longitude: -122.3493,
-        address: "1920 Jazz Alley, Seattle, WA",
-        imageUrl: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        rating: 4.6,
-        priceLevel: 3,
-        isOpen: false,
-        availabilityStatus: "limited",
-        currentVisitors: 3,
-        tags: ["jazz", "speakeasy", "intimate", "live music"],
-        trendingScore: 6.5,
-        aiScore: 7.9
-      },
-      {
-        name: "Artisan's Hidden Studio",
-        description: "Watch local ceramics being made, buy unique pieces",
-        category: "art",
-        latitude: 47.6142,
-        longitude: -122.3077,
-        address: "Capitol Hill Artist District, Seattle, WA",
-        imageUrl: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        rating: 4.5,
-        priceLevel: 2,
-        isOpen: true,
-        availabilityStatus: "available",
-        currentVisitors: 5,
-        tags: ["ceramics", "artisan", "studio", "handmade"],
-        trendingScore: 5.8,
-        aiScore: 7.2
-      },
-      {
-        name: "Moonlight Coffee Roasters",
-        description: "Third-wave coffee in a converted bookstore",
-        category: "cafe",
-        latitude: 47.6175,
-        longitude: -122.3251,
-        address: "Broadway District, Seattle, WA",
-        imageUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
-        rating: 4.4,
-        priceLevel: 2,
-        isOpen: true,
-        availabilityStatus: "available",
-        currentVisitors: 15,
-        tags: ["third-wave", "bookstore", "roastery", "specialty"],
-        trendingScore: 7.2,
-        aiScore: 6.8
+  private async seedData() {
+    try {
+      // Seed users
+      const defaultUser = await db.insert(users).values({
+        username: "demo_user",
+        email: "demo@localcurate.com",
+        location: "Downtown Seattle",
+        preferences: ["cafe", "art"],
+      }).returning();
+
+      // Seed experiences with real Google Maps data
+      let sampleExperiences: any[] = [];
+
+      if (this.googleMapsService) {
+        console.log("Fetching real location data from Google Maps...");
+        
+        // Seattle downtown coordinates
+        const seattleCoords = { lat: 47.6062, lng: -122.3321 };
+        
+        // Fetch real places for different categories
+        const [cafes, restaurants, artGalleries, museums] = await Promise.all([
+          this.googleMapsService.searchNearbyPlaces(seattleCoords.lat, seattleCoords.lng, 5000, 'cafe'),
+          this.googleMapsService.searchNearbyPlaces(seattleCoords.lat, seattleCoords.lng, 5000, 'restaurant'),
+          this.googleMapsService.searchPlacesByText('art gallery Seattle', seattleCoords, 5000),
+          this.googleMapsService.searchPlacesByText('museum Seattle', seattleCoords, 5000)
+        ]);
+
+        // Convert Google Maps places to experiences
+        const cafeExperiences = cafes.slice(0, 3).map(place => 
+          this.googleMapsService!.convertToExperience(place, 'cafe')
+        );
+        const restaurantExperiences = restaurants.slice(0, 2).map(place => 
+          this.googleMapsService!.convertToExperience(place, 'food')
+        );
+        const artExperiences = artGalleries.slice(0, 2).map(place => 
+          this.googleMapsService!.convertToExperience(place, 'art')
+        );
+        const museumExperiences = museums.slice(0, 1).map(place => 
+          this.googleMapsService!.convertToExperience(place, 'art')
+        );
+
+        sampleExperiences = [
+          ...cafeExperiences,
+          ...restaurantExperiences,
+          ...artExperiences,
+          ...museumExperiences
+        ];
+
+        console.log(`Found ${sampleExperiences.length} real places from Google Maps`);
       }
-    ];
 
-    sampleExperiences.forEach(exp => {
-      const experience: Experience = { ...exp, id: this.currentExperienceId++ };
-      this.experiences.set(experience.id, experience);
-    });
-
-    // Seed social trends
-    const trends: Omit<SocialTrend, 'id'>[] = [
-      {
-        hashtag: "#SeattleHiddenGems",
-        mentions: 1247,
-        growthRate: 147,
-        relatedExperiences: [1, 2, 3]
-      },
-      {
-        hashtag: "#LocalSeattle",
-        mentions: 892,
-        growthRate: 89,
-        relatedExperiences: [3, 5]
+      // Fallback to curated experiences if Google Maps fails
+      if (sampleExperiences.length === 0) {
+        console.log("Using curated Seattle experiences");
+        sampleExperiences = [
+          {
+            name: "The Secret Garden Café",
+            description: "Hidden rooftop garden café with locally-sourced pastries and artisan coffee",
+            category: "cafe",
+            latitude: 47.6089,
+            longitude: -122.3355,
+            address: "1234 Hidden Garden Way, Seattle, WA",
+            imageUrl: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
+            rating: 4.9,
+            priceLevel: 2,
+            isOpen: true,
+            availabilityStatus: "available",
+            currentVisitors: 23,
+            tags: ["rooftop", "garden", "artisan", "coffee"],
+            trendingScore: 8.5,
+            aiScore: 9.2
+          },
+          {
+            name: "Pike Place Market",
+            description: "Iconic Seattle market with fresh seafood, flowers, and local vendors",
+            category: "food",
+            latitude: 47.6101,
+            longitude: -122.3421,
+            address: "85 Pike St, Seattle, WA 98101",
+            imageUrl: "https://images.unsplash.com/photo-1488459716781-31db52582fe9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
+            rating: 4.8,
+            priceLevel: 2,
+            isOpen: true,
+            availabilityStatus: "available",
+            currentVisitors: 45,
+            tags: ["market", "seafood", "local", "historic"],
+            trendingScore: 9.1,
+            aiScore: 8.7
+          },
+          {
+            name: "Seattle Art Museum",
+            description: "Contemporary and traditional art in downtown Seattle",
+            category: "art",
+            latitude: 47.6071,
+            longitude: -122.3387,
+            address: "1300 1st Ave, Seattle, WA 98101",
+            imageUrl: "https://images.unsplash.com/photo-1549490349-8643362247b5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=400",
+            rating: 4.7,
+            priceLevel: 3,
+            isOpen: true,
+            availabilityStatus: "available",
+            currentVisitors: 28,
+            tags: ["museum", "contemporary", "traditional", "downtown"],
+            trendingScore: 7.8,
+            aiScore: 8.1
+          }
+        ];
       }
-    ];
 
-    trends.forEach(trend => {
-      const socialTrend: SocialTrend = { ...trend, id: this.currentTrendId++ };
-      this.socialTrendsMap.set(socialTrend.id, socialTrend);
-    });
+      await db.insert(experiences).values(sampleExperiences);
+
+      // Seed social trends
+      const trends = [
+        {
+          hashtag: "#SeattleHiddenGems",
+          mentions: 1247,
+          growthRate: 147,
+          relatedExperiences: [1, 2, 3]
+        },
+        {
+          hashtag: "#LocalSeattle",
+          mentions: 892,
+          growthRate: 89,
+          relatedExperiences: [3, 5]
+        }
+      ];
+
+      await db.insert(socialTrends).values(trends);
+
+      console.log("Database seeded successfully");
+    } catch (error) {
+      console.error("Error seeding database:", error);
+    }
   }
 
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = { ...insertUser, id, savedExperiences: [] };
-    this.users.set(id, user);
+    const [user] = await db.insert(users).values({
+      ...insertUser,
+      savedExperiences: []
+    }).returning();
     return user;
   }
 
   async updateUserPreferences(userId: number, preferences: string[]): Promise<void> {
-    const user = this.users.get(userId);
-    if (user) {
-      user.preferences = preferences;
-      this.users.set(userId, user);
-    }
+    await db.update(users)
+      .set({ preferences })
+      .where(eq(users.id, userId));
   }
 
   async updateUserSavedExperiences(userId: number, savedExperiences: number[]): Promise<void> {
-    const user = this.users.get(userId);
-    if (user) {
-      user.savedExperiences = savedExperiences;
-      this.users.set(userId, user);
-    }
+    await db.update(users)
+      .set({ savedExperiences })
+      .where(eq(users.id, userId));
   }
 
   async getAllExperiences(): Promise<Experience[]> {
-    return Array.from(this.experiences.values());
+    return await db.select().from(experiences);
   }
 
   async getExperienceById(id: number): Promise<Experience | undefined> {
-    return this.experiences.get(id);
+    const [experience] = await db.select().from(experiences).where(eq(experiences.id, id));
+    return experience || undefined;
   }
 
   async getExperiencesByCategory(category: string): Promise<Experience[]> {
-    return Array.from(this.experiences.values()).filter(exp => exp.category === category);
+    return await db.select().from(experiences).where(eq(experiences.category, category));
   }
 
   async getExperiencesNearLocation(lat: number, lng: number, radius: number): Promise<Experience[]> {
-    const experiences = Array.from(this.experiences.values());
-    return experiences.filter(exp => {
-      const distance = this.calculateDistance(lat, lng, exp.latitude, exp.longitude);
-      return distance <= radius;
-    });
+    // Using PostgreSQL's built-in distance calculation
+    const result = await db.select().from(experiences).where(
+      sql`(
+        3959 * acos(
+          cos(radians(${lat})) * cos(radians(latitude)) * 
+          cos(radians(longitude) - radians(${lng})) + 
+          sin(radians(${lat})) * sin(radians(latitude))
+        )
+      ) <= ${radius}`
+    );
+    return result;
   }
 
   async updateExperienceStatus(id: number, status: string, visitors?: number): Promise<void> {
-    const experience = this.experiences.get(id);
-    if (experience) {
-      experience.availabilityStatus = status;
-      if (visitors !== undefined) {
-        experience.currentVisitors = visitors;
-      }
-      this.experiences.set(id, experience);
+    const updateData: any = { availabilityStatus: status };
+    if (visitors !== undefined) {
+      updateData.currentVisitors = visitors;
     }
+    await db.update(experiences)
+      .set(updateData)
+      .where(eq(experiences.id, id));
   }
 
   async getUserPreferences(userId: number): Promise<UserPreferences | undefined> {
-    return Array.from(this.userPreferencesMap.values()).find(pref => pref.userId === userId);
+    const [preferences] = await db.select().from(userPreferences).where(eq(userPreferences.userId, userId));
+    return preferences || undefined;
   }
 
   async createUserPreferences(insertPreferences: InsertUserPreferences): Promise<UserPreferences> {
-    const id = this.currentPreferencesId++;
-    const preferences: UserPreferences = { ...insertPreferences, id };
-    this.userPreferencesMap.set(id, preferences);
+    const [preferences] = await db.insert(userPreferences).values(insertPreferences).returning();
     return preferences;
   }
 
   async getAllTrends(): Promise<SocialTrend[]> {
-    return Array.from(this.socialTrendsMap.values());
+    return await db.select().from(socialTrends);
   }
 
   async getTrendingExperiences(): Promise<Experience[]> {
-    const experiences = Array.from(this.experiences.values());
-    return experiences
-      .sort((a, b) => b.trendingScore - a.trendingScore)
-      .slice(0, 10);
+    return await db.select().from(experiences)
+      .orderBy(sql`trending_score DESC`)
+      .limit(10);
   }
 
-  private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-    const R = 3959; // Earth's radius in miles
-    const dLat = this.toRadians(lat2 - lat1);
-    const dLng = this.toRadians(lng2 - lng1);
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
+  async refreshExperiencesFromGoogleMaps(location: { lat: number; lng: number }, radius: number = 5000): Promise<Experience[]> {
+    if (!this.googleMapsService) {
+      throw new Error('Google Maps service not available');
+    }
+
+    try {
+      // Fetch fresh data from Google Maps
+      const [cafes, restaurants, artGalleries, museums, events] = await Promise.all([
+        this.googleMapsService.searchNearbyPlaces(location.lat, location.lng, radius, 'cafe'),
+        this.googleMapsService.searchNearbyPlaces(location.lat, location.lng, radius, 'restaurant'),
+        this.googleMapsService.searchPlacesByText('art gallery', location, radius),
+        this.googleMapsService.searchPlacesByText('museum', location, radius),
+        this.googleMapsService.searchPlacesByText('events entertainment', location, radius)
+      ]);
+
+      // Convert to experiences
+      const newExperiences = [
+        ...cafes.slice(0, 5).map(place => this.googleMapsService!.convertToExperience(place, 'cafe')),
+        ...restaurants.slice(0, 5).map(place => this.googleMapsService!.convertToExperience(place, 'food')),
+        ...artGalleries.slice(0, 3).map(place => this.googleMapsService!.convertToExperience(place, 'art')),
+        ...museums.slice(0, 3).map(place => this.googleMapsService!.convertToExperience(place, 'art')),
+        ...events.slice(0, 2).map(place => this.googleMapsService!.convertToExperience(place, 'events'))
+      ];
+
+      // Clear existing experiences and add new ones
+      await db.delete(experiences);
+      if (newExperiences.length > 0) {
+        const insertedExperiences = await db.insert(experiences).values(newExperiences).returning();
+        console.log(`Refreshed ${insertedExperiences.length} experiences from Google Maps`);
+        return insertedExperiences;
+      } else {
+        console.log('No new experiences found, returning empty array');
+        return [];
+      }
+    } catch (error) {
+      console.error('Error refreshing experiences from Google Maps:', error);
+      throw error;
+    }
   }
 
-  private toRadians(degrees: number): number {
-    return degrees * (Math.PI / 180);
-  }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
